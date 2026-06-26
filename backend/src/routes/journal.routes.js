@@ -5,10 +5,11 @@ import {
   deleteEntry,
   getPrompt,
 } from '../controllers/journalController.js';
-import { protect, requireCouple } from '../middleware/auth.middleware.js';
+import { protect } from '../middleware/auth.middleware.js';
 
 const router = Router();
-router.use(protect, requireCouple);
+// Journals are personal — only auth required, no couple needed.
+router.use(protect);
 
 router.get('/prompt', getPrompt);
 router.get('/', listEntries);

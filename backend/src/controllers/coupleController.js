@@ -1,6 +1,7 @@
 import Couple from '../models/couple.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import { makeInviteCode } from '../utils/helpers.js';
+import { notifyPartner } from './notificationController.js';
 
 const CODE_EXPIRY_MIN = 5; // invite codes die after 5 minutes (privacy)
 
@@ -13,10 +14,29 @@ function freshCode() {
 
 // POST /api/couple/create
 // First partner creates the couple space and gets a short-lived invite code.
+// If user is already in a solo couple (waiting for partner), regenerates the code.
 export const createCouple = asyncHandler(async (req, res) => {
   if (req.user.couple) {
-    return res.status(400).json({ message: 'You are already in a couple' });
+    const existing = await Couple.findById(req.user.couple);
+    if (existing) {
+      if (existing.members.length >= 2) {
+        return res.status(400).json({ message: 'You are already paired with a partner' });
+      }
+      // Solo couple — refresh the invite code and return it
+      const code = freshCode();
+      existing.inviteCode = code.inviteCode;
+      existing.inviteCodeExpires = code.inviteCodeExpires;
+      await existing.save();
+      return res.status(200).json({
+        couple: existing,
+        inviteCode: existing.inviteCode,
+        expiresAt: existing.inviteCodeExpires,
+      });
+    }
+    // Stale reference — couple document was deleted, clear and recreate
+    req.user.couple = null;
   }
+
   const code = freshCode();
   const couple = await Couple.create({
     members: [req.user._id],
@@ -105,11 +125,17 @@ export const updateCouple = asyncHandler(async (req, res) => {
   const couple = await Couple.findById(req.user.couple);
   if (!couple) return res.status(404).json({ message: 'Couple not found' });
 
+  const renamed = petName !== undefined && petName !== couple.pet.name;
   if (anniversary !== undefined) couple.anniversary = anniversary;
   if (nextDate !== undefined) couple.nextDate = nextDate;
   if (petName !== undefined) couple.pet.name = petName;
 
   await couple.save();
+
+  if (renamed) {
+    notifyPartner(couple, req.user._id, 'pet_named', { petName: couple.pet.name });
+  }
+
   res.json({ couple });
 });
 

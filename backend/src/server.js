@@ -14,6 +14,7 @@ import petRoutes from './routes/pet.routes.js';
 import journalRoutes from './routes/journal.routes.js';
 import photoRoutes from './routes/photo.routes.js';
 import streakRoutes from './routes/streak.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use('/api/pet', petRoutes);
 app.use('/api/journal', journalRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/streak', streakRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

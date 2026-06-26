@@ -1,6 +1,7 @@
 import Couple from '../models/couple.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
-import { todayStr, yesterdayStr } from '../utils/helpers.js'
+import { todayStr, yesterdayStr } from '../utils/helpers.js';
+import { notifyPartner } from './notificationController.js';
 
 export const getStreak = asyncHandler(async (req, res) => {
   const couple = await Couple.findById(req.user.couple);
@@ -31,6 +32,13 @@ export const checkIn = asyncHandler(async (req, res) => {
 
   couple.markModified('streak');
   await couple.save();
+
+  // Notify partner that this user checked in
+  notifyPartner(couple, req.user._id, 'check_in', {
+    streakCount: s.count,
+    completedToday: bothIn,
+  });
+
   res.json({ streak: serializeStreak(s, req.user._id) });
 });
 

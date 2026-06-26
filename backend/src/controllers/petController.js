@@ -1,6 +1,7 @@
 import Couple from '../models/couple.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import { todayStr, stageFromCare } from '../utils/helpers.js';
+import { notifyPartner } from './notificationController.js';
 
 const DECAY_PER_DAY = 10;
 
@@ -11,7 +12,7 @@ function applyDecay(pet) {
   const daysPassed = Math.floor((now - last) / 86400000);
   if (daysPassed > 0) {
     const drop = daysPassed * DECAY_PER_DAY;
-    pet.fullness = Math.max(0, pet.fullness - drop);  
+    pet.fullness = Math.max(0, pet.fullness - drop);
     pet.happiness = Math.max(0, pet.happiness - drop);
   }
 }
@@ -27,7 +28,7 @@ function refreshStage(pet) {
   pet.stage = stageFromCare(pet.careLevel);
 }
 
-async function careForPet(req, res, { fullnessDelta, happinessDelta }) {
+async function careForPet(req, res, { fullnessDelta, happinessDelta, notifType }) {
   const couple = await Couple.findById(req.user.couple);
   if (!couple) return res.status(404).json({ message: 'Couple not found' });
 
@@ -55,6 +56,9 @@ async function careForPet(req, res, { fullnessDelta, happinessDelta }) {
   couple.markModified('pet');
   await couple.save();
 
+  // Notify partner asynchronously
+  notifyPartner(couple, req.user._id, notifType, { petName: pet.name });
+
   res.json({ pet: serializePet(pet, bothCaredToday) });
 }
 
@@ -74,11 +78,11 @@ export const getPet = asyncHandler(async (req, res) => {
 });
 
 export const feedPet = asyncHandler((req, res) =>
-  careForPet(req, res, { fullnessDelta: 15, happinessDelta: 5 })
+  careForPet(req, res, { fullnessDelta: 15, happinessDelta: 5, notifType: 'pet_fed' })
 );
 
 export const playWithPet = asyncHandler((req, res) =>
-  careForPet(req, res, { fullnessDelta: -5, happinessDelta: 15 })
+  careForPet(req, res, { fullnessDelta: -5, happinessDelta: 15, notifType: 'pet_played' })
 );
 
 function serializePet(pet, bothCaredToday) {

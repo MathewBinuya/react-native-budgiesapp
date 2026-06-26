@@ -1,6 +1,7 @@
 import JournalEntry from '../models/journal.model.js';
 import Couple from '../models/couple.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
+import { notifyPartner } from './notificationController.js';
 
 const PROMPTS = [
   'What made you smile today?',
@@ -23,29 +24,29 @@ export const getPrompt = asyncHandler(async (req, res) => {
 });
 
 // GET /api/journal?author=me|partner
-// Each partner has their own diary. ?author=me returns yours, =partner theirs.
+// Journals are personal — no couple required.
+// ?author=partner requires a paired couple.
 export const listEntries = asyncHandler(async (req, res) => {
   const which = req.query.author || 'me';
 
-  let authorId = req.user._id;
   if (which === 'partner') {
-    // find the other member of the couple
+    if (!req.user.couple) return res.json({ entries: [] });
     const couple = await Couple.findById(req.user.couple);
-    if (!couple) return res.status(404).json({ message: 'Couple not found' });
-    const partner = couple.members.find(
+    if (!couple) return res.json({ entries: [] });
+    const partnerId = couple.members.find(
       (m) => m.toString() !== req.user._id.toString()
     );
-    if (!partner) {
-      // no partner yet → empty journal
-      return res.json({ entries: [] });
-    }
-    authorId = partner;
+    if (!partnerId) return res.json({ entries: [] });
+
+    const entries = await JournalEntry.find({ author: partnerId })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .populate('author', 'name accentColor');
+    return res.json({ entries });
   }
 
-  const entries = await JournalEntry.find({
-    couple: req.user.couple,
-    author: authorId,
-  })
+  // author=me — query only by author (no couple required)
+  const entries = await JournalEntry.find({ author: req.user._id })
     .sort({ createdAt: -1 })
     .limit(50)
     .populate('author', 'name accentColor');
@@ -54,30 +55,34 @@ export const listEntries = asyncHandler(async (req, res) => {
 });
 
 // POST /api/journal   body: { text }
-// Always writes to the current user's own journal.
+// Personal journal — no couple required.
 export const createEntry = asyncHandler(async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ message: 'Text is required' });
 
   const entry = await JournalEntry.create({
-    couple: req.user.couple,
+    couple: req.user.couple || null,
     author: req.user._id,
     text: text.trim(),
   });
   await entry.populate('author', 'name accentColor');
+
+  // Notify partner (non-blocking, no-op if not paired)
+  if (req.user.couple) {
+    const couple = await Couple.findById(req.user.couple);
+    notifyPartner(couple, req.user._id, 'journal_written');
+  }
+
   res.status(201).json({ entry });
 });
 
-// DELETE /api/journal/:id  (author only)
+// DELETE /api/journal/:id  (author only — no couple required)
 export const deleteEntry = asyncHandler(async (req, res) => {
   const entry = await JournalEntry.findOne({
     _id: req.params.id,
-    couple: req.user.couple,
+    author: req.user._id,
   });
   if (!entry) return res.status(404).json({ message: 'Entry not found' });
-  if (entry.author.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ message: 'You can only delete your own entries' });
-  }
   await entry.deleteOne();
   res.json({ message: 'Deleted' });
 });
