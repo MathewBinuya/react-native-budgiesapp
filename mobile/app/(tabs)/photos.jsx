@@ -11,6 +11,7 @@ import {
   Image,
   TextInput,
   Platform,
+  Linking,
 } from "react-native";
 import { useState, useCallback } from "react";
 import { router, useFocusEffect } from "expo-router";
@@ -33,6 +34,18 @@ function formatPhotoDate(iso) {
   }
 }
 
+// Resolve ImagePicker once so the require only runs once
+let _ImagePicker = null;
+function getImagePicker() {
+  if (_ImagePicker) return _ImagePicker;
+  try {
+    _ImagePicker = require("expo-image-picker");
+    return _ImagePicker;
+  } catch {
+    return null;
+  }
+}
+
 export default function Photos() {
   const { isPaired } = useCoupleStore();
 
@@ -40,10 +53,7 @@ export default function Photos() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Fullscreen preview
   const [preview, setPreview] = useState(null);
-
-  // Caption input
   const [captionModal, setCaptionModal] = useState(false);
   const [caption, setCaption] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
@@ -62,38 +72,85 @@ export default function Photos() {
     }, [isPaired])
   );
 
+  // ── Permission + picker ────────────────────────────────────────────────────
   const handleUpload = async () => {
-    // Dynamically import expo-image-picker so the rest of the screen
-    // still renders even if the package hasn't been installed yet.
-    let ImagePicker;
-    try {
-      ImagePicker = require("expo-image-picker");
-    } catch {
+    const ImagePicker = getImagePicker();
+
+    if (!ImagePicker) {
       Alert.alert(
-        "Package required",
-        'Run "expo install expo-image-picker" to enable photo uploads.',
+        "Package not installed",
+        'Run  expo install expo-image-picker  inside the mobile folder, then rebuild the app.',
       );
       return;
     }
 
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission needed", "Allow access to your photo library to upload images.");
+    // Check existing permission status before requesting
+    let currentStatus;
+    try {
+      const perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+      currentStatus = perm.status;
+    } catch {
+      currentStatus = "undetermined";
+    }
+
+    if (currentStatus === "denied") {
+      // User previously denied — send them to Settings
+      Alert.alert(
+        "Photo access required",
+        "You've previously denied photo access. Please enable it in your device Settings to upload photos.",
+        [
+          { text: "Not now", style: "cancel" },
+          {
+            text: "Open Settings",
+            onPress: () => Linking.openSettings(),
+          },
+        ],
+      );
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? "images",
-      allowsEditing: true,
-      quality: 0.85,
-    });
+    if (currentStatus !== "granted") {
+      // Ask for permission
+      const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-    if (result.canceled || !result.assets?.length) return;
+      if (status !== "granted") {
+        if (!canAskAgain) {
+          Alert.alert(
+            "Photo access required",
+            "Please enable photo access in your device Settings to upload photos.",
+            [
+              { text: "Not now", style: "cancel" },
+              { text: "Open Settings", onPress: () => Linking.openSettings() },
+            ],
+          );
+        } else {
+          Alert.alert(
+            "Permission needed",
+            "Allow access to your photo library to upload shared memories.",
+          );
+        }
+        return;
+      }
+    }
 
-    const asset = result.assets[0];
-    setPendingFile(asset);
-    setCaption("");
-    setCaptionModal(true);
+    // Permission granted — open library
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        // SDK 54 accepts the string form; MediaTypeOptions is deprecated
+        mediaTypes: "images",
+        allowsEditing: true,
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      setPendingFile(asset);
+      setCaption("");
+      setCaptionModal(true);
+    } catch (err) {
+      Alert.alert("Couldn't open photos", err?.message || "Try again.");
+    }
   };
 
   const confirmUpload = async () => {
@@ -111,6 +168,7 @@ export default function Photos() {
 
     const res = await api.upload("/photos", formData);
     setUploading(false);
+
     if (res.ok) {
       setPhotos((prev) => [res.data.photo, ...prev]);
     } else {
@@ -139,7 +197,7 @@ export default function Photos() {
     ]);
   };
 
-  // ── Locked state ────────────────────────────────────────────────
+  // ── Locked state ─────────────────────────────────────────────────────────
   if (!isPaired) {
     return (
       <View style={styles.safe}>
@@ -153,34 +211,21 @@ export default function Photos() {
         <View style={styles.center}>
           <Ionicons name="images-outline" size={64} color={COLORS.textMuted} style={{ marginBottom: 12 }} />
           <Text style={styles.lockTitle}>Shared gallery</Text>
-          <Text style={styles.lockSub}>
-            Pair with someone to start sharing memories.
-          </Text>
+          <Text style={styles.lockSub}>Pair with someone to start sharing memories.</Text>
         </View>
       </View>
     );
   }
 
-  // ── Gallery ──────────────────────────────────────────────────────
-  const renderItem = ({ item }) => (
-    <TouchableOpacity onPress={() => setPreview(item)} style={styles.cell}>
-      <Image source={{ uri: item.url }} style={styles.thumb} resizeMode="cover" />
-    </TouchableOpacity>
-  );
-
+  // ── Gallery ───────────────────────────────────────────────────────────────
   return (
     <View style={styles.safe}>
-      {/* Header */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={26} color={COLORS.textColor} />
         </TouchableOpacity>
         <Text style={styles.topTitle}>Photos</Text>
-        <TouchableOpacity
-          style={styles.uploadBtn}
-          onPress={handleUpload}
-          disabled={uploading}
-        >
+        <TouchableOpacity style={styles.uploadBtn} onPress={handleUpload} disabled={uploading}>
           {uploading ? (
             <ActivityIndicator size="small" color={COLORS.white} />
           ) : (
@@ -204,7 +249,11 @@ export default function Photos() {
           data={photos}
           keyExtractor={(p) => p._id}
           numColumns={COLS}
-          renderItem={renderItem}
+          renderItem={({ item }) => (
+            <TouchableOpacity onPress={() => setPreview(item)} style={styles.cell}>
+              <Image source={{ uri: item.url }} style={styles.thumb} resizeMode="cover" />
+            </TouchableOpacity>
+          )}
           contentContainerStyle={styles.grid}
           columnWrapperStyle={{ gap: 4 }}
           showsVerticalScrollIndicator={false}
@@ -232,10 +281,7 @@ export default function Photos() {
               >
                 <Text style={styles.captionSkipText}>Skip</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.captionSaveBtn}
-                onPress={confirmUpload}
-              >
+              <TouchableOpacity style={styles.captionSaveBtn} onPress={confirmUpload}>
                 <Text style={styles.captionSaveText}>Upload</Text>
               </TouchableOpacity>
             </View>
@@ -246,20 +292,12 @@ export default function Photos() {
       {/* Fullscreen preview */}
       <Modal visible={!!preview} transparent animationType="fade">
         <View style={styles.previewOverlay}>
-          <TouchableOpacity
-            style={styles.previewClose}
-            onPress={() => setPreview(null)}
-          >
+          <TouchableOpacity style={styles.previewClose} onPress={() => setPreview(null)}>
             <Ionicons name="close" size={28} color={COLORS.white} />
           </TouchableOpacity>
-
           {preview && (
             <>
-              <Image
-                source={{ uri: preview.url }}
-                style={styles.previewImage}
-                resizeMode="contain"
-              />
+              <Image source={{ uri: preview.url }} style={styles.previewImage} resizeMode="contain" />
               {preview.caption ? (
                 <Text style={styles.previewCaption}>{preview.caption}</Text>
               ) : null}
@@ -267,11 +305,7 @@ export default function Photos() {
                 {formatPhotoDate(preview.takenAt || preview.createdAt)}
                 {preview.uploadedBy?.name ? `  ·  ${preview.uploadedBy.name}` : ""}
               </Text>
-
-              <TouchableOpacity
-                style={styles.previewDelete}
-                onPress={() => handleDelete(preview)}
-              >
+              <TouchableOpacity style={styles.previewDelete} onPress={() => handleDelete(preview)}>
                 <Ionicons name="trash-outline" size={22} color={COLORS.white} />
               </TouchableOpacity>
             </>
@@ -284,181 +318,56 @@ export default function Photos() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-
   topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12,
   },
   backBtn: { width: 40, height: 40, justifyContent: "center" },
-  topTitle: {
-    fontSize: 18,
-    color: COLORS.textColor,
-    fontFamily: FONTS.regular,
-    fontWeight: "700",
-  },
+  topTitle: { fontSize: 18, color: COLORS.textColor, fontFamily: FONTS.regular, fontWeight: "700" },
   uploadBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.darkButton,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: COLORS.darkButton, alignItems: "center", justifyContent: "center",
   },
 
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  lockTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: COLORS.textColor,
-    fontFamily: FONTS.regular,
-    marginBottom: 6,
-  },
-  lockSub: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    fontFamily: FONTS.regular,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.textColor,
-    fontFamily: FONTS.regular,
-    marginBottom: 4,
-  },
-  emptySub: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    fontFamily: FONTS.regular,
-    textAlign: "center",
-  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
+  lockTitle: { fontSize: 20, fontWeight: "700", color: COLORS.textColor, fontFamily: FONTS.regular, marginBottom: 6 },
+  lockSub: { fontSize: 14, color: COLORS.textMuted, fontFamily: FONTS.regular, textAlign: "center", lineHeight: 20 },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: COLORS.textColor, fontFamily: FONTS.regular, marginBottom: 4 },
+  emptySub: { fontSize: 14, color: COLORS.textMuted, fontFamily: FONTS.regular, textAlign: "center" },
 
-  // Grid
   grid: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 20 },
-  cell: {
-    width: CELL,
-    height: CELL,
-    borderRadius: 8,
-    overflow: "hidden",
-    marginBottom: 4,
-  },
+  cell: { width: CELL, height: CELL, borderRadius: 8, overflow: "hidden", marginBottom: 4 },
   thumb: { width: "100%", height: "100%" },
 
-  // Caption modal
-  captionOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
+  captionOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
   captionCard: {
     backgroundColor: COLORS.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24,
   },
-  captionTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: COLORS.textColor,
-    fontFamily: FONTS.regular,
-    marginBottom: 14,
-    textAlign: "center",
-  },
+  captionTitle: { fontSize: 17, fontWeight: "700", color: COLORS.textColor, fontFamily: FONTS.regular, marginBottom: 14, textAlign: "center" },
   captionInput: {
-    backgroundColor: COLORS.inputBackground,
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: COLORS.textColor,
-    fontFamily: FONTS.regular,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 18,
+    backgroundColor: COLORS.inputBackground, borderRadius: 12, padding: 14,
+    fontSize: 15, color: COLORS.textColor, fontFamily: FONTS.regular,
+    borderWidth: 1, borderColor: COLORS.border, marginBottom: 18,
   },
   captionBtns: { flexDirection: "row", gap: 12 },
-  captionSkipBtn: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  captionSkipText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: COLORS.textColor,
-    fontFamily: FONTS.regular,
-  },
-  captionSaveBtn: {
-    flex: 1,
-    backgroundColor: COLORS.darkButton,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  captionSaveText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: COLORS.white,
-    fontFamily: FONTS.regular,
-  },
+  captionSkipBtn: { flex: 1, backgroundColor: COLORS.card, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  captionSkipText: { fontSize: 15, fontWeight: "700", color: COLORS.textColor, fontFamily: FONTS.regular },
+  captionSaveBtn: { flex: 1, backgroundColor: COLORS.darkButton, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
+  captionSaveText: { fontSize: 15, fontWeight: "700", color: COLORS.white, fontFamily: FONTS.regular },
 
-  // Fullscreen preview
-  previewOverlay: {
-    flex: 1,
-    backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  previewClose: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 54 : 20,
-    left: 20,
-    zIndex: 10,
-    padding: 8,
-  },
-  previewImage: {
-    width,
-    height: width * 1.2,
-  },
+  previewOverlay: { flex: 1, backgroundColor: "#000", justifyContent: "center", alignItems: "center" },
+  previewClose: { position: "absolute", top: Platform.OS === "ios" ? 54 : 20, left: 20, zIndex: 10, padding: 8 },
+  previewImage: { width, height: width * 1.2 },
   previewCaption: {
-    position: "absolute",
-    bottom: 80,
-    left: 20,
-    right: 20,
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: FONTS.regular,
-    textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    position: "absolute", bottom: 80, left: 20, right: 20,
+    color: "#fff", fontSize: 15, fontFamily: FONTS.regular, textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.8)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   previewDate: {
-    position: "absolute",
-    bottom: 54,
-    left: 20,
-    right: 20,
-    color: "rgba(255,255,255,0.65)",
-    fontSize: 13,
-    fontFamily: FONTS.regular,
-    textAlign: "center",
+    position: "absolute", bottom: 54, left: 20, right: 20,
+    color: "rgba(255,255,255,0.65)", fontSize: 13, fontFamily: FONTS.regular, textAlign: "center",
   },
-  previewDelete: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 54 : 20,
-    right: 20,
-    padding: 8,
-    zIndex: 10,
-  },
+  previewDelete: { position: "absolute", top: Platform.OS === "ios" ? 54 : 20, right: 20, padding: 8, zIndex: 10 },
 });
