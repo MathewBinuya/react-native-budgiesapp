@@ -3,6 +3,7 @@ import {
   createCouple,
   joinCouple,
   getCouple,
+  leaveCouple,
   updateCouple,
   regenerateCode
 } from '../controllers/coupleController.js';
@@ -13,6 +14,7 @@ router.use(protect);
 
 router.post('/create', createCouple);
 router.post('/join', joinCouple);
+router.post("/leave", leaveCouple);
 router.get('/', requireCouple, getCouple);
 router.patch('/', requireCouple, updateCouple);
 router.post("/regenerate", regenerateCode); // regenerate code

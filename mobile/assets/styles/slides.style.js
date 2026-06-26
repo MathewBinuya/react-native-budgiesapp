@@ -73,6 +73,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontFamily: FONTS.regular,
   },
+  image: {
+  width: width * 0.7,
+  height: width * 0.7,
+  marginBottom: 30,
+},
 });
  
 

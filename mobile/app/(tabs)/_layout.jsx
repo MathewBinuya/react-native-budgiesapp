@@ -50,6 +50,9 @@ export default function TabsLayout() {
         }}
       />
 
+      {/* Exist as routes but hidden from the bar — opened from the header */}
+      <Tabs.Screen name="profile" options={{ href: null }} />
+      <Tabs.Screen name="notification" options={{ href: null }} />
     </Tabs>
   );
 }

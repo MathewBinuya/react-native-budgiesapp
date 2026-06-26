@@ -112,3 +112,38 @@ export const updateCouple = asyncHandler(async (req, res) => {
   await couple.save();
   res.json({ couple });
 });
+
+// POST /api/couple/leave
+// Removes the current user from their couple. If they were the only member
+// left, the couple document is deleted. Lets users (and you, while testing)
+// reset out of a half-paired or unwanted couple.
+export const leaveCouple = asyncHandler(async (req, res) => {
+  if (!req.user.couple) {
+    return res.status(400).json({ message: "You're not in a couple" });
+  }
+
+  const couple = await Couple.findById(req.user.couple);
+
+  if (couple) {
+    // remove this user from the members list
+    couple.members = couple.members.filter(
+      (m) => m.toString() !== req.user._id.toString()
+    );
+
+    if (couple.members.length === 0) {
+      // no one left → delete the whole couple
+      await couple.deleteOne();
+    } else {
+      // a partner remains — clear any pending invite code and save
+      couple.inviteCode = undefined;
+      couple.inviteCodeExpires = undefined;
+      await couple.save();
+    }
+  }
+
+  // clear the link on the user
+  req.user.couple = null;
+  await req.user.save();
+
+  res.json({ message: "Left couple" });
+});

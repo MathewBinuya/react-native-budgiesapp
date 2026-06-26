@@ -6,56 +6,44 @@ import FONTS from "../constants/fonts";
 import { useAuthStore } from "../store/authStore";
 
 export default function Index() {
-  const { token, user, hasOnboarded, bootstrap } = useAuthStore();
-  const [ready, setReady] = useState(false);
+  const { token, user, hasOnboarded, isBootstrapping, bootstrap } = useAuthStore();
+  const [minTimePassed, setMinTimePassed] = useState(false);
 
-  // session check + minimum 1.5s logo display, in parallel
   useEffect(() => {
-    const init = async () => {
-      const minDelay = new Promise((resolve) => setTimeout(resolve, 1500));
-      await Promise.all([bootstrap(), minDelay]);
-      setReady(true);
-    };
-    init();
+    bootstrap();
+    const t = setTimeout(() => setMinTimePassed(true), 1500);
+    return () => clearTimeout(t);
   }, []);
 
-  // once both the check AND the delay are done, route
   useEffect(() => {
-    if (!ready) return;
+    if (isBootstrapping || !minTimePassed) return;
 
-    // logged in?
     if (token && user) {
-      // paired with a partner? (couple is set once they pair)
       if (user.couple) {
         router.replace("/(tabs)/home");
       } else {
-        router.replace("/(onBoarding)/home"); // needs to pair with partner
+        router.replace("/(onBoarding)/pair");
       }
       return;
     }
 
-    // not logged in — has the user seen onboarding before?
     if (hasOnboarded) {
-      router.replace("/(auth)/welcome"); // straight to welcome/login
+      router.replace("/(auth)/welcome");
     } else {
-      router.replace("/(onBoarding)/slides"); // first time → intro
+      router.replace("/(onBoarding)/slides");
     }
-  }, [ready, token, user, hasOnboarded]);
+  }, [isBootstrapping, minTimePassed, token, user, hasOnboarded]);
 
   return (
     <View style={styles.container}>
       <Image
-        source={require("../assets/images/login-image.png")} // your Budgies logo here
+        source={require("../assets/images/login-image.png")}
         style={styles.logo}
         resizeMode="contain"
       />
       <Text style={styles.appName}>Budgies</Text>
       <Text style={styles.tagline}>you & me, day by day</Text>
-      <ActivityIndicator
-        size="small"
-        color={COLORS.darkButton}
-        style={{ marginTop: 24 }}
-      />
+      <ActivityIndicator size="small" color={COLORS.darkButton} style={{ marginTop: 24 }} />
     </View>
   );
 }

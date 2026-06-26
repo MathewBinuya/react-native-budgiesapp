@@ -1,4 +1,5 @@
 import JournalEntry from '../models/journal.model.js';
+import Couple from '../models/couple.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 
 const PROMPTS = [
@@ -21,33 +22,53 @@ export const getPrompt = asyncHandler(async (req, res) => {
   res.json({ prompt: PROMPTS[dayOfYear % PROMPTS.length] });
 });
 
+// GET /api/journal?author=me|partner
+// Each partner has their own diary. ?author=me returns yours, =partner theirs.
 export const listEntries = asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  const query = { couple: req.user.couple };
-  if (req.query.before) {
-    query.createdAt = { $lt: new Date(req.query.before) };
+  const which = req.query.author || 'me';
+
+  let authorId = req.user._id;
+  if (which === 'partner') {
+    // find the other member of the couple
+    const couple = await Couple.findById(req.user.couple);
+    if (!couple) return res.status(404).json({ message: 'Couple not found' });
+    const partner = couple.members.find(
+      (m) => m.toString() !== req.user._id.toString()
+    );
+    if (!partner) {
+      // no partner yet → empty journal
+      return res.json({ entries: [] });
+    }
+    authorId = partner;
   }
-  const entries = await JournalEntry.find(query)
+
+  const entries = await JournalEntry.find({
+    couple: req.user.couple,
+    author: authorId,
+  })
     .sort({ createdAt: -1 })
-    .limit(limit)
-    .populate('author', 'name accentColor avatar');
+    .limit(50)
+    .populate('author', 'name accentColor');
+
   res.json({ entries });
 });
 
+// POST /api/journal   body: { text }
+// Always writes to the current user's own journal.
 export const createEntry = asyncHandler(async (req, res) => {
-  const { text, prompt } = req.body;
+  const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ message: 'Text is required' });
 
   const entry = await JournalEntry.create({
     couple: req.user.couple,
     author: req.user._id,
     text: text.trim(),
-    prompt: prompt || null,
   });
-  await entry.populate('author', 'name accentColor avatar');
+  await entry.populate('author', 'name accentColor');
   res.status(201).json({ entry });
 });
 
+// DELETE /api/journal/:id  (author only)
 export const deleteEntry = asyncHandler(async (req, res) => {
   const entry = await JournalEntry.findOne({
     _id: req.params.id,

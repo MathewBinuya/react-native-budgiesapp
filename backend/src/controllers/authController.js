@@ -32,6 +32,17 @@ export const getMe = asyncHandler(async (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
+// PATCH /api/auth/accent  body: { accentColor }
+export const updateAccent = asyncHandler(async (req, res) => {
+  const { accentColor } = req.body;
+  if (!accentColor) {
+    return res.status(400).json({ message: 'accentColor is required' });
+  }
+  req.user.accentColor = accentColor;
+  await req.user.save();
+  res.json({ user: publicUser(req.user) });
+});
+
 function publicUser(u) {
   return {
     id: u._id,

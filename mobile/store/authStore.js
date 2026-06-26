@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import { API_URL } from "../constants/api";
 
 const TOKEN_KEY = "budgies_token";
@@ -11,8 +11,8 @@ export const useAuthStore = create((set, get) => ({
   user: null,
   token: null,
   hasOnboarded: false,
-  isLoading: false,        // true during a login/register request
-  isBootstrapping: true,   // true on startup until we've read storage
+  isLoading: false,
+  isBootstrapping: true,
 
   // --- REGISTER ---
   register: async (name, email, password) => {
@@ -28,7 +28,7 @@ export const useAuthStore = create((set, get) => ({
         return { success: false, error: data.message || "Could not sign up" };
       }
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(data.user));
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
       set({ user: data.user, token: data.token });
       return { success: true };
     } catch (err) {
@@ -52,7 +52,7 @@ export const useAuthStore = create((set, get) => ({
         return { success: false, error: data.message || "Could not log in" };
       }
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(data.user));
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
       set({ user: data.user, token: data.token });
       return { success: true };
     } catch (err) {
@@ -66,7 +66,7 @@ export const useAuthStore = create((set, get) => ({
   bootstrap: async () => {
     try {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      const userJson = await SecureStore.getItemAsync(USER_KEY);
+      const userJson = await AsyncStorage.getItem(USER_KEY);
       const onboarded = await AsyncStorage.getItem(ONBOARDED_KEY);
       set({
         token: token || null,
@@ -80,29 +80,24 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // Mark onboarding as seen (called when the user finishes the intro slides)
+  // Mark onboarding as seen
   completeOnboarding: async () => {
     await AsyncStorage.setItem(ONBOARDED_KEY, "true");
     set({ hasOnboarded: true });
   },
 
-  // --- CREATE COUPLE (first partner) ---
+  // --- CREATE COUPLE ---
   createCouple: async () => {
     const { token, user } = get();
     try {
       const res = await fetch(`${API_URL}/couple/create`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.message || "Could not create" };
-      }
+      if (!res.ok) return { success: false, error: data.message || "Could not create" };
       const updatedUser = { ...user, couple: data.couple._id };
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
       set({ user: updatedUser });
       return { success: true, inviteCode: data.inviteCode };
     } catch (err) {
@@ -110,50 +105,37 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // --- REGENERATE CODE (creating partner, when the old one expired) ---
+  // --- REGENERATE CODE ---
   regenerateCode: async () => {
     const { token } = get();
     try {
       const res = await fetch(`${API_URL}/couple/regenerate`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.message || "Could not regenerate" };
-      }
+      if (!res.ok) return { success: false, error: data.message || "Could not regenerate" };
       return { success: true, inviteCode: data.inviteCode };
     } catch (err) {
       return { success: false, error: "Network error. Is the server running?" };
     }
   },
 
-  // --- JOIN COUPLE (second partner) ---
+  // --- JOIN COUPLE ---
   joinCouple: async (inviteCode) => {
     const { token, user } = get();
     try {
       const res = await fetch(`${API_URL}/couple/join`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ inviteCode: inviteCode.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
-        // 410 = expired code (silent expiry — partner needs a fresh one)
-        return {
-          success: false,
-          expired: res.status === 410,
-          error: data.message || "Could not join",
-        };
+        return { success: false, expired: res.status === 410, error: data.message || "Could not join" };
       }
       const updatedUser = { ...user, couple: data.couple._id };
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedUser));
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
       set({ user: updatedUser });
       return { success: true };
     } catch (err) {
@@ -161,11 +143,29 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // --- UPDATE ACCENT COLOR ---
+  setAccent: async (accentColor) => {
+    const { token } = get();
+    try {
+      const res = await fetch(`${API_URL}/auth/accent`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ accentColor }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.message || "Could not save color" };
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      set({ user: data.user });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: "Network error." };
+    }
+  },
+
   // --- LOGOUT ---
   logout: async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
-    // NOTE: we keep hasOnboarded = true so returning users skip the slides
+    await AsyncStorage.removeItem(USER_KEY);
     set({ user: null, token: null });
   },
 }));

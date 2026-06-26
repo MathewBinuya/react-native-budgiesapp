@@ -3,16 +3,15 @@ import {
   Text,
   FlatList,
   Image,
-  Dimensions,
   TouchableOpacity,
-  StyleSheet,
+  Dimensions
 } from "react-native";
 import { router } from "expo-router";
 import React, { useRef, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import styles from "../../assets/styles/slides.style";
 
-
+const { width } = Dimensions.get("window");
 
 
 const SLIDES = [
@@ -40,6 +39,8 @@ export default function Slides() {
   const listRef = useRef(null);
   const [index, setIndex] = useState(0);
   const { completeOnboarding } = useAuthStore();
+
+  
 
   const isLast = index === SLIDES.length - 1;
 
@@ -77,12 +78,12 @@ export default function Slides() {
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScroll}
         renderItem={({ item }) => (
-          <View style={[styles.slide, { width }]}>
-            <Image source={item.image} style={styles.image} resizeMode="contain" />
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.body}>{item.body}</Text>
-         </View>
-        )}
+        <View style={[styles.slide, { width }]}>
+          <Image source={item.image} style={styles.image} resizeMode="contain" />
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.body}>{item.body}</Text>
+        </View>
+      )}
       />
 
       {/* Dots */}

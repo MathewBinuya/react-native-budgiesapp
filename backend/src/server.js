@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { connectDB } from './lib/db.js';
 import { errorHandler, notFound } from './middleware/error.middleware.js';
 
+import cronJob from './lib/cron.js';
 import authRoutes from './routes/auth.routes.js';
 import coupleRoutes from './routes/couple.routes.js';
 import petRoutes from './routes/pet.routes.js';
@@ -38,6 +39,7 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
 
-connectDB(process.env.MONGODB_URI).then(() => {
+connectDB(process.env.MONGO_URI).then(() => {
   app.listen(PORT, () => console.log(`✓ Budgies API on http://localhost:${PORT}`));
+  if (process.env.API_URL) cronJob.start();
 });

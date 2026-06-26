@@ -33,9 +33,8 @@ export default function Login() {
       Alert.alert("Couldn't log in", result.error);
       return;
     }
-    // The root layout's redirect effect will move us into the app,
-    // but we can nudge it directly too:
-    router.replace("/(tabs)/pet");
+    
+    router.replace("/(tabs)/home");
   };
 
   return (
