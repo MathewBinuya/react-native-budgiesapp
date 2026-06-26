@@ -17,6 +17,7 @@ import AppHeader from "../../components/AppHeader";
 import COLORS from "../../constants/colors";
 import FONTS from "../../constants/fonts";
 import { useAuthStore } from "../../store/authStore";
+import { useCoupleStore } from "../../store/coupleStore";
 import { useJournalStore } from "../../store/journalStore";
 
 function tint(hex, alpha = "1A") {
@@ -24,7 +25,6 @@ function tint(hex, alpha = "1A") {
   return hex + alpha;
 }
 
-// "2026-06-26T..." → "Friday, June 26"
 function formatDate(iso) {
   try {
     const d = new Date(iso);
@@ -40,41 +40,30 @@ function formatDate(iso) {
 
 export default function Write() {
   const { user } = useAuthStore();
-  const { myEntries, partnerEntries, prompt, loading, loadEntries, addEntry } =
+  const { isPaired, loaded: coupleLoaded } = useCoupleStore();
+  const { myEntries, partnerEntries, prompt, loading, loadEntries, addEntry, deleteEntry } =
     useJournalStore();
 
-  const isPaired = !!user?.couple;
-  const myAccent = user?.accentColor || "#88A99E";
+  const myAccent = user?.accentColor || COLORS.darkButton;
 
   const [tab, setTab] = useState("mine");
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (isPaired) loadEntries();
-  }, [isPaired]);
+  // For delete confirmation
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  if (!isPaired) {
-    return (
-      <View style={styles.safe}>
-        <AppHeader title="Journal" />
-        <View style={styles.lockWrap}>
-          <Text style={styles.lockEmoji}>📔</Text>
-          <Text style={styles.lockTitle}>Pair to open your journal</Text>
-          <Text style={styles.lockHint}>
-            You'll each keep your own diary — and get to peek at each other's.
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  useEffect(() => {
+    loadEntries({ withPartner: isPaired });
+  }, [isPaired]);
 
   const viewingMine = tab === "mine";
   const entries = viewingMine ? myEntries : partnerEntries;
-  // partner accent comes from their entries (populated author.accentColor)
+
   const partnerAccent =
-    partnerEntries[0]?.author?.accentColor || "#DD8E75";
+    partnerEntries[0]?.author?.accentColor || COLORS.lightButton;
   const accent = viewingMine ? myAccent : partnerAccent;
 
   const handleSave = async () => {
@@ -91,13 +80,30 @@ export default function Write() {
     }
     setDraft("");
     setComposing(false);
-    setTab("mine"); // jump to your journal to see it
+    setTab("mine");
+  };
+
+  const handleLongPress = (entry) => {
+    if (!viewingMine) return; // can only delete own entries
+    setDeleteTarget(entry);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const result = await deleteEntry(deleteTarget._id);
+    setDeleting(false);
+    setDeleteTarget(null);
+    if (!result.success) {
+      Alert.alert("Couldn't delete", result.error);
+    }
   };
 
   return (
     <View style={styles.safe}>
       <AppHeader title="Journal" />
 
+      {/* Tab toggle — show partner tab only when paired and loaded */}
       <View style={styles.toggle}>
         <TouchableOpacity
           style={[styles.toggleBtn, viewingMine && { backgroundColor: myAccent }]}
@@ -107,17 +113,19 @@ export default function Write() {
             My journal
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.toggleBtn,
-            !viewingMine && { backgroundColor: partnerAccent },
-          ]}
-          onPress={() => setTab("partner")}
-        >
-          <Text style={[styles.toggleText, !viewingMine && styles.toggleActive]}>
-            Partner's
-          </Text>
-        </TouchableOpacity>
+        {coupleLoaded && isPaired && (
+          <TouchableOpacity
+            style={[
+              styles.toggleBtn,
+              !viewingMine && { backgroundColor: partnerAccent },
+            ]}
+            onPress={() => setTab("partner")}
+          >
+            <Text style={[styles.toggleText, !viewingMine && styles.toggleActive]}>
+              Partner's
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {loading ? (
@@ -128,20 +136,33 @@ export default function Write() {
         <ScrollView
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {entries.map((e) => (
-            <View
+            <TouchableOpacity
               key={e._id}
-              style={[styles.page, { backgroundColor: tint(accent) }]}
+              onLongPress={() => handleLongPress(e)}
+              delayLongPress={400}
+              activeOpacity={0.85}
             >
-              <View style={styles.pageHead}>
-                <View style={[styles.dot, { backgroundColor: accent }]} />
-                <Text style={[styles.date, { color: accent }]}>
-                  {formatDate(e.createdAt)}
-                </Text>
+              <View style={[styles.page, { backgroundColor: tint(accent) }]}>
+                <View style={styles.pageHead}>
+                  <View style={[styles.dot, { backgroundColor: accent }]} />
+                  <Text style={[styles.date, { color: accent }]}>
+                    {formatDate(e.createdAt)}
+                  </Text>
+                  {viewingMine && (
+                    <Ionicons
+                      name="ellipsis-horizontal"
+                      size={16}
+                      color={accent}
+                      style={{ marginLeft: "auto" }}
+                    />
+                  )}
+                </View>
+                <Text style={styles.entryText}>{e.text}</Text>
               </View>
-              <Text style={styles.entryText}>{e.text}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
 
           {entries.length === 0 && (
@@ -152,10 +173,11 @@ export default function Write() {
             </Text>
           )}
 
-          <View style={{ height: 90 }} />
+          <View style={{ height: 100 }} />
         </ScrollView>
       )}
 
+      {/* FAB — always visible for own journal */}
       {viewingMine && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: myAccent }]}
@@ -165,18 +187,27 @@ export default function Write() {
         </TouchableOpacity>
       )}
 
+      {/* Compose modal */}
       <Modal visible={composing} animationType="slide" transparent>
         <KeyboardAvoidingView
           style={styles.modalWrap}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
         >
           <View style={styles.modalCard}>
             <View style={styles.modalHead}>
-              <TouchableOpacity onPress={() => setComposing(false)}>
+              <TouchableOpacity
+                onPress={() => { setComposing(false); setDraft(""); }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Text style={styles.modalCancel}>Cancel</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>New entry</Text>
-              <TouchableOpacity onPress={handleSave} disabled={saving}>
+              <TouchableOpacity
+                onPress={handleSave}
+                disabled={saving}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 {saving ? (
                   <ActivityIndicator color={myAccent} />
                 ) : (
@@ -184,22 +215,70 @@ export default function Write() {
                 )}
               </TouchableOpacity>
             </View>
+
             {prompt ? (
               <Text style={styles.promptHint}>💭 {prompt}</Text>
             ) : (
-              <Text style={styles.modalDate}>Today</Text>
+              <Text style={styles.modalDate}>
+                {new Date().toLocaleDateString(undefined, {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </Text>
             )}
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Dear journal…"
-              placeholderTextColor={COLORS.textMuted}
-              value={draft}
-              onChangeText={setDraft}
-              multiline
-              autoFocus
-            />
+
+            <ScrollView
+              style={styles.inputScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Dear journal…"
+                placeholderTextColor={COLORS.textMuted}
+                value={draft}
+                onChangeText={setDraft}
+                multiline
+                autoFocus
+                textAlignVertical="top"
+                scrollEnabled={false}
+              />
+              <View style={{ height: 40 }} />
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade">
+        <View style={styles.deleteOverlay}>
+          <View style={styles.deleteCard}>
+            <Text style={styles.deleteTitle}>Delete entry?</Text>
+            <Text style={styles.deleteHint}>
+              This journal entry will be permanently removed.
+            </Text>
+            <View style={styles.deleteBtns}>
+              <TouchableOpacity
+                style={styles.deleteCancelBtn}
+                onPress={() => setDeleteTarget(null)}
+              >
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmBtn}
+                onPress={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <Text style={styles.deleteConfirmText}>Delete</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -207,11 +286,6 @@ export default function Write() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-
-  lockWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30 },
-  lockEmoji: { fontSize: 52, marginBottom: 10 },
-  lockTitle: { fontSize: 20, fontWeight: "700", color: COLORS.textColor, fontFamily: FONTS.regular },
-  lockHint: { fontSize: 14, color: COLORS.textMuted, fontFamily: FONTS.regular, textAlign: "center", marginTop: 6, lineHeight: 20 },
 
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
 
@@ -223,16 +297,36 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginBottom: 6,
   },
-  toggleBtn: { flex: 1, paddingVertical: 9, borderRadius: 11, alignItems: "center" },
-  toggleText: { fontSize: 13, color: COLORS.textMuted, fontFamily: FONTS.regular, fontWeight: "600" },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 11,
+    alignItems: "center",
+  },
+  toggleText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+    fontWeight: "600",
+  },
   toggleActive: { color: COLORS.white },
 
   list: { paddingHorizontal: 18, paddingTop: 8, gap: 14 },
   page: { borderRadius: 16, padding: 18 },
-  pageHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  pageHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
   dot: { width: 10, height: 10, borderRadius: 5 },
   date: { fontSize: 15, fontWeight: "700", fontFamily: FONTS.regular },
-  entryText: { fontSize: 15, color: COLORS.textColor, fontFamily: FONTS.regular, lineHeight: 26 },
+  entryText: {
+    fontSize: 15,
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+    lineHeight: 26,
+  },
   empty: {
     fontSize: 14,
     color: COLORS.textMuted,
@@ -259,33 +353,123 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  modalWrap: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.3)" },
+  // Compose modal
+  modalWrap: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
   modalCard: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
-    minHeight: "70%",
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+    maxHeight: "90%",
   },
-  modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  modalCancel: { fontSize: 15, color: COLORS.textMuted, fontFamily: FONTS.regular },
-  modalTitle: { fontSize: 16, fontWeight: "700", color: COLORS.textColor, fontFamily: FONTS.regular },
-  modalSave: { fontSize: 15, fontWeight: "700", fontFamily: FONTS.regular },
-  modalDate: { fontSize: 13, color: COLORS.textMuted, fontFamily: FONTS.regular, marginTop: 16, marginBottom: 8 },
+  modalHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  modalCancel: {
+    fontSize: 15,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+  },
+  modalSave: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontFamily: FONTS.regular,
+  },
+  modalDate: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+    marginTop: 14,
+    marginBottom: 6,
+  },
   promptHint: {
     fontSize: 14,
     color: COLORS.textMuted,
     fontFamily: FONTS.regular,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 14,
+    marginBottom: 6,
     fontStyle: "italic",
+    lineHeight: 20,
   },
+  inputScroll: { flex: 1, marginTop: 8 },
   modalInput: {
-    flex: 1,
     fontSize: 16,
     color: COLORS.textColor,
     fontFamily: FONTS.regular,
     lineHeight: 26,
-    textAlignVertical: "top",
+    minHeight: 200,
+  },
+
+  // Delete modal
+  deleteOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+  },
+  deleteCard: {
+    width: "100%",
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 24,
+  },
+  deleteTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  deleteHint: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  deleteBtns: { flexDirection: "row", gap: 12 },
+  deleteCancelBtn: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  deleteCancelText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    backgroundColor: "#D4638D",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  deleteConfirmText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.white,
+    fontFamily: FONTS.regular,
   },
 });

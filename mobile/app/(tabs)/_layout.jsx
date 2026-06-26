@@ -1,10 +1,19 @@
+import { useEffect } from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import COLORS from "../../constants/colors";
+import { useCoupleStore } from "../../store/coupleStore";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { loadCoupleData } = useCoupleStore();
+
+  // Load couple data once when the tab navigator mounts so all tab
+  // screens share a single authoritative isPaired value from the server.
+  useEffect(() => {
+    loadCoupleData();
+  }, []);
 
   return (
     <Tabs
@@ -50,9 +59,10 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Exist as routes but hidden from the bar — opened from the header */}
+      {/* Hidden routes — opened via navigation, not the tab bar */}
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="notification" options={{ href: null }} />
+      <Tabs.Screen name="photos" options={{ href: null }} />
     </Tabs>
   );
 }

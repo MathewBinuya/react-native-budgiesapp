@@ -5,15 +5,20 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from "react-native";
-import { useEffect } from "react";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import AppHeader from "../../components/AppHeader";
+import MochiSprite from "../../components/MochiSprite";
 import COLORS from "../../constants/colors";
 import FONTS from "../../constants/fonts";
-import { useAuthStore } from "../../store/authStore";
+import { useCoupleStore } from "../../store/coupleStore";
 import { usePetStore } from "../../store/petStore";
+import api from "../../lib/api";
 
-const STAGE_EMOJI = { egg: "🥚", chick: "🐣", budgie: "🦜" };
 const STAGE_LABEL = { egg: "Egg", chick: "Chick", budgie: "Budgie" };
 const MOOD_EMOJI = { happy: "😊", content: "😌", sad: "😢" };
 
@@ -31,7 +36,7 @@ function StatBar({ label, value, color }) {
         <View
           style={[
             styles.barFill,
-            { width: `${Math.round(value)}%`, backgroundColor: color },
+            { width: `${Math.round(Math.max(0, Math.min(100, value)))}%`, backgroundColor: color },
           ]}
         />
       </View>
@@ -41,13 +46,19 @@ function StatBar({ label, value, color }) {
 }
 
 export default function Pet() {
-  const { user } = useAuthStore();
+  const { isPaired, loaded: coupleLoaded } = useCoupleStore();
   const { pet, loading, loadPet, feedPet, playWithPet } = usePetStore();
-  const isPaired = !!user?.couple;
 
-  useEffect(() => {
-    if (isPaired) loadPet();
-  }, [isPaired]);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+
+  // Refresh pet data every time this screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (isPaired) loadPet();
+    }, [isPaired])
+  );
 
   const handleFeed = async () => {
     const result = await feedPet();
@@ -59,16 +70,51 @@ export default function Pet() {
     if (!result.success) Alert.alert("Oops", result.error);
   };
 
+  const openRename = () => {
+    setNewName(pet?.name || "Mochi");
+    setRenaming(true);
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      setRenaming(false);
+      return;
+    }
+    setSavingName(true);
+    const res = await api.patch("/couple", { petName: trimmed });
+    setSavingName(false);
+    if (res.ok) {
+      // Reload pet to reflect new name
+      await loadPet();
+    } else {
+      Alert.alert("Couldn't rename", res.data?.message || "Try again.");
+    }
+    setRenaming(false);
+  };
+
+  // Still loading couple status — show spinner to avoid lock screen flash
+  if (!coupleLoaded) {
+    return (
+      <View style={styles.safe}>
+        <AppHeader title="Pet" />
+        <View style={styles.center}>
+          <ActivityIndicator color={COLORS.darkButton} />
+        </View>
+      </View>
+    );
+  }
+
+  // Locked state — not paired
   if (!isPaired) {
     return (
       <View style={styles.safe}>
-        <AppHeader title="Mochi" />
+        <AppHeader title="Pet" />
         <View style={styles.center}>
-          <Text style={styles.bigEmoji}>🥚</Text>
-          <Text style={styles.heading}>Pair to meet Mochi</Text>
+          <Text style={styles.lockEmoji}>🥚</Text>
+          <Text style={styles.heading}>Your nest is waiting</Text>
           <Text style={styles.sub}>
-            Link up with your partner to hatch and raise your shared budgie
-            together.
+            Pair with someone to unlock your shared pet.
           </Text>
         </View>
       </View>
@@ -78,7 +124,7 @@ export default function Pet() {
   if (loading && !pet) {
     return (
       <View style={styles.safe}>
-        <AppHeader title="Mochi" />
+        <AppHeader title="Pet" />
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.darkButton} />
         </View>
@@ -95,17 +141,24 @@ export default function Pet() {
 
   return (
     <View style={styles.safe}>
-      <AppHeader title="Mochi" />
+      <AppHeader title="Pet" />
 
       <View style={styles.content}>
         <Text style={styles.stageLabel}>{STAGE_LABEL[stage]}</Text>
 
+        {/* Animated budgie sprite */}
         <View style={styles.petCircle}>
-          <Text style={styles.petEmoji}>{STAGE_EMOJI[stage]}</Text>
-          <Text style={styles.moodBadge}>{MOOD_EMOJI[mood]}</Text>
+          <MochiSprite stage={stage} mood={mood} />
         </View>
 
-        <Text style={styles.petName}>{name}</Text>
+        {/* Tappable pet name */}
+        <TouchableOpacity style={styles.nameRow} onPress={openRename}>
+          <Text style={styles.petName}>{name}</Text>
+          <Ionicons name="pencil" size={14} color={COLORS.textMuted} style={{ marginLeft: 6, marginTop: 3 }} />
+        </TouchableOpacity>
+
+        {/* Mood badge */}
+        <Text style={styles.moodLabel}>{MOOD_EMOJI[mood]} {mood}</Text>
 
         {bothCaredToday ? (
           <View style={styles.togetherBadge}>
@@ -118,16 +171,8 @@ export default function Pet() {
         )}
 
         <View style={styles.statsCard}>
-          <StatBar
-            label="Fullness"
-            value={fullness}
-            color={COLORS.darkButton}
-          />
-          <StatBar
-            label="Happiness"
-            value={happiness}
-            color={COLORS.lightButton}
-          />
+          <StatBar label="Fullness" value={fullness} color={COLORS.darkButton} />
+          <StatBar label="Happiness" value={happiness} color={COLORS.lightButton} />
         </View>
 
         <View style={styles.actions}>
@@ -149,6 +194,45 @@ export default function Pet() {
 
         <Text style={styles.evolveHint}>{EVOLVE_HINT[stage]}</Text>
       </View>
+
+      {/* Rename modal */}
+      <Modal visible={renaming} transparent animationType="fade">
+        <View style={styles.renameOverlay}>
+          <View style={styles.renameCard}>
+            <Text style={styles.renameTitle}>Name your pet</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="Mochi"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+              maxLength={24}
+              returnKeyType="done"
+              onSubmitEditing={handleSaveName}
+            />
+            <View style={styles.renameBtns}>
+              <TouchableOpacity
+                style={styles.renameCancelBtn}
+                onPress={() => setRenaming(false)}
+              >
+                <Text style={styles.renameCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.renameSaveBtn}
+                onPress={handleSaveName}
+                disabled={savingName}
+              >
+                {savingName ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <Text style={styles.renameSaveText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -180,28 +264,32 @@ const styles = StyleSheet.create({
   },
 
   petCircle: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
     backgroundColor: COLORS.card,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 8,
-  },
-  petEmoji: { fontSize: 76 },
-  moodBadge: {
-    fontSize: 26,
-    position: "absolute",
-    bottom: 8,
-    right: 8,
+    marginBottom: 12,
   },
 
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   petName: {
     fontSize: 26,
     fontWeight: "700",
     color: COLORS.textColor,
     fontFamily: FONTS.regular,
+  },
+  moodLabel: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
     marginBottom: 8,
+    textTransform: "capitalize",
   },
 
   togetherBadge: {
@@ -222,6 +310,7 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontFamily: FONTS.regular,
     marginBottom: 4,
+    textAlign: "center",
   },
 
   statsCard: {
@@ -229,7 +318,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.card,
     borderRadius: 18,
     padding: 18,
-    marginTop: 16,
+    marginTop: 14,
     gap: 14,
   },
   statRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -256,7 +345,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  actions: { flexDirection: "row", gap: 14, marginTop: 20, width: "100%" },
+  actions: { flexDirection: "row", gap: 14, marginTop: 18, width: "100%" },
   actionBtn: {
     flex: 1,
     flexDirection: "row",
@@ -278,16 +367,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textMuted,
     fontFamily: FONTS.regular,
-    marginTop: 18,
+    marginTop: 16,
     textAlign: "center",
   },
 
-  bigEmoji: { fontSize: 72, marginBottom: 10 },
+  lockEmoji: { fontSize: 72, marginBottom: 10 },
   heading: {
     fontSize: 22,
     color: COLORS.textColor,
     fontFamily: FONTS.regular,
     fontWeight: "700",
+    textAlign: "center",
   },
   sub: {
     fontSize: 14,
@@ -296,5 +386,68 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     marginTop: 4,
+  },
+
+  // Rename modal
+  renameOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+  },
+  renameCard: {
+    width: "100%",
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 24,
+  },
+  renameTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  renameInput: {
+    backgroundColor: COLORS.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 20,
+  },
+  renameBtns: { flexDirection: "row", gap: 12 },
+  renameCancelBtn: {
+    flex: 1,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  renameCancelText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.textColor,
+    fontFamily: FONTS.regular,
+  },
+  renameSaveBtn: {
+    flex: 1,
+    backgroundColor: COLORS.darkButton,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  renameSaveText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.white,
+    fontFamily: FONTS.regular,
   },
 });

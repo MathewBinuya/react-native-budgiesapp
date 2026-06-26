@@ -3,10 +3,11 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
-import { useEffect } from "react";
-import { router } from "expo-router";
+import { useCallback } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AppHeader from "../../components/AppHeader";
 import COLORS from "../../constants/colors";
@@ -16,20 +17,21 @@ import { useCoupleStore } from "../../store/coupleStore";
 
 export default function Home() {
   const { user } = useAuthStore();
-  const { streak, daysTogether, isPaired, loadCoupleData, checkIn } =
+  const { streak, daysTogether, isPaired, loaded: coupleLoaded, loadCoupleData, checkIn } =
     useCoupleStore();
 
-  // Load real couple + streak data when Home mounts
-  useEffect(() => {
-    loadCoupleData();
-  }, []);
+  // Refresh couple + streak data every time Home comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadCoupleData();
+    }, [])
+  );
 
   const streakCount = streak?.count ?? 0;
-  const checkedInToday = streak?.youCheckedInToday;
+  const checkedInToday = streak?.youCheckedInToday ?? false;
 
   const handleCheckIn = async () => {
-    const result = await checkIn();
-    // streak state updates inside the store; nothing else needed here
+    await checkIn();
   };
 
   return (
@@ -44,8 +46,8 @@ export default function Home() {
         </Text>
         <Text style={styles.subGreeting}>here's your nest today</Text>
 
-        {/* Not paired → prompt; everything else stays empty/zero */}
-        {!isPaired && (
+        {/* Not paired → prompt to pair (only show after couple status is loaded) */}
+        {coupleLoaded && !isPaired && (
           <TouchableOpacity
             style={styles.pairPrompt}
             onPress={() => router.push("/(onBoarding)/pair")}
@@ -54,27 +56,27 @@ export default function Home() {
             <View style={{ flex: 1 }}>
               <Text style={styles.pairTitle}>Pair with your partner</Text>
               <Text style={styles.pairHint}>
-                Link up to start your streak, journal & photos.
+                Link up to unlock streaks, photos, pet & more.
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={COLORS.darkButton} />
           </TouchableOpacity>
         )}
 
-        {/* Streak — real count; 0 until paired & checking in */}
-        <View style={styles.streakCard}>
-          <View style={styles.streakLeft}>
-            <Text style={styles.streakNumber}>{streakCount}</Text>
-            <Text style={styles.streakLabel}>
-              {streakCount === 1 ? "day streak" : "day streak"}
-            </Text>
-          </View>
-          {isPaired ? (
+        {/* ── Streak ──────────────────────────────────── */}
+        <Text style={styles.sectionTitle}>Streak</Text>
+        {!coupleLoaded ? (
+          <View style={styles.loadingCard}><ActivityIndicator color={COLORS.darkButton} /></View>
+        ) : isPaired ? (
+          <View style={styles.streakCard}>
+            <View style={styles.streakLeft}>
+              <Text style={styles.streakNumber}>{streakCount}</Text>
+              <Text style={styles.streakLabel}>
+                {streakCount === 1 ? "day" : "days"}
+              </Text>
+            </View>
             <TouchableOpacity
-              style={[
-                styles.checkInBtn,
-                checkedInToday && styles.checkInDone,
-              ]}
+              style={[styles.checkInBtn, checkedInToday && styles.checkInDone]}
               onPress={handleCheckIn}
               disabled={checkedInToday}
             >
@@ -82,63 +84,95 @@ export default function Home() {
                 {checkedInToday ? "✓ Checked in" : "Check in"}
               </Text>
             </TouchableOpacity>
-          ) : (
-            <Text style={styles.flame}>🔥</Text>
-          )}
-        </View>
+          </View>
+        ) : (
+          <View style={styles.lockedCard}>
+            <Ionicons name="lock-closed" size={20} color={COLORS.textMuted} />
+            <Text style={styles.lockedText}>
+              Pair with someone to begin your shared streak.
+            </Text>
+          </View>
+        )}
 
-        {/* Us card */}
-        <Text style={styles.sectionTitle}>Us</Text>
-        <View style={styles.usCard}>
-          <View style={styles.usAvatars}>
-            <View style={styles.usBubble}>
-              <Text style={styles.usInitial}>
-                {user?.name ? user.name.charAt(0).toUpperCase() : "B"}
-              </Text>
+        {/* ── Us ──────────────────────────────────────── */}
+        <Text style={[styles.sectionTitle, { marginTop: 22 }]}>Partner Us</Text>
+        {!coupleLoaded ? (
+          <View style={styles.loadingCard}><ActivityIndicator color={COLORS.darkButton} /></View>
+        ) : isPaired ? (
+          <View style={styles.usCard}>
+            <View style={styles.usAvatars}>
+              <View style={styles.usBubble}>
+                <Text style={styles.usInitial}>
+                  {user?.name ? user.name.charAt(0).toUpperCase() : "B"}
+                </Text>
+              </View>
+              <View style={[styles.usBubble, styles.usBubbleOverlap]}>
+                <Text style={styles.usInitial}>♥</Text>
+              </View>
             </View>
-            <View style={[styles.usBubble, styles.usBubbleOverlap]}>
-              <Text style={styles.usInitial}>{isPaired ? "♥" : "?"}</Text>
+            <Text style={styles.usNames}>
+              {user?.name?.split(" ")[0]} & Partner
+            </Text>
+            <View style={styles.usMetaRow}>
+              <View style={styles.usMeta}>
+                <Text style={styles.usMetaNum}>
+                  {daysTogether != null ? daysTogether : "—"}
+                </Text>
+                <Text style={styles.usMetaLabel}>days together</Text>
+              </View>
+              <View style={styles.usDivider} />
+              <TouchableOpacity
+                style={styles.usMeta}
+                onPress={() => router.push("/(tabs)/profile")}
+              >
+                <Text style={styles.usMetaNum}>🗓️</Text>
+                <Text style={styles.usMetaLabel}>set a date</Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.usNames}>
-            {isPaired
-              ? `${user?.name?.split(" ")[0]} & Partner`
-              : "You & ..."}
-          </Text>
-          <View style={styles.usMetaRow}>
-            <View style={styles.usMeta}>
-              <Text style={styles.usMetaNum}>
-                {isPaired && daysTogether != null ? daysTogether : "—"}
-              </Text>
-              <Text style={styles.usMetaLabel}>days together</Text>
-            </View>
-            <View style={styles.usDivider} />
-            <TouchableOpacity
-              style={styles.usMeta}
-              onPress={() => router.push("/(tabs)/profile")}
-            >
-              <Text style={styles.usMetaNum}>🗓️</Text>
-              <Text style={styles.usMetaLabel}>set a date</Text>
-            </TouchableOpacity>
+        ) : (
+          <View style={styles.lockedCard}>
+            <Ionicons name="lock-closed" size={20} color={COLORS.textMuted} />
+            <Text style={styles.lockedText}>
+              Pair with someone to see your shared journey.
+            </Text>
           </View>
-        </View>
+        )}
 
-        {/* Photos */}
+        {/* ── Photos ──────────────────────────────────── */}
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Photos</Text>
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>
+            Photos
+          </Text>
           {isPaired && (
-            <TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push("/(tabs)/photos")}
+            >
               <Text style={styles.seeAll}>See all</Text>
             </TouchableOpacity>
           )}
         </View>
-        <View style={styles.photoEmpty}>
-          <Text style={styles.photoEmptyText}>
-            {isPaired
-              ? "No memories yet — tap + to add your first 📸"
-              : "Your photos will appear here once you pair 📸"}
-          </Text>
-        </View>
+
+        {!coupleLoaded ? (
+          <View style={styles.loadingCard}><ActivityIndicator color={COLORS.darkButton} /></View>
+        ) : isPaired ? (
+          <TouchableOpacity
+            style={styles.photoEmpty}
+            onPress={() => router.push("/(tabs)/photos")}
+          >
+            <Ionicons name="images-outline" size={32} color={COLORS.textMuted} style={{ marginBottom: 8 }} />
+            <Text style={styles.photoEmptyText}>
+              Open your shared gallery to add memories 📸
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.lockedCard}>
+            <Ionicons name="lock-closed" size={20} color={COLORS.textMuted} />
+            <Text style={styles.lockedText}>
+              Pair with someone to start sharing memories.
+            </Text>
+          </View>
+        )}
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -187,42 +221,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  streakCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 22,
-  },
-  streakLeft: { flexDirection: "row", alignItems: "baseline", gap: 8 },
-  streakNumber: {
-    fontSize: 38,
-    fontWeight: "700",
-    color: COLORS.darkButton,
-    fontFamily: FONTS.regular,
-  },
-  streakLabel: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-    fontFamily: FONTS.regular,
-  },
-  flame: { fontSize: 38 },
-  checkInBtn: {
-    backgroundColor: COLORS.darkButton,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  checkInDone: { backgroundColor: COLORS.lightButton },
-  checkInText: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: "700",
-    fontFamily: FONTS.regular,
-  },
-
   sectionTitle: {
     fontSize: 17,
     fontWeight: "700",
@@ -244,6 +242,59 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // Locked state shared by streak, us, photos
+  lockedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    padding: 18,
+  },
+  lockedText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+    lineHeight: 20,
+  },
+
+  // Streak
+  streakCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    padding: 20,
+  },
+  streakLeft: { flexDirection: "row", alignItems: "baseline", gap: 8 },
+  streakNumber: {
+    fontSize: 38,
+    fontWeight: "700",
+    color: COLORS.darkButton,
+    fontFamily: FONTS.regular,
+  },
+  streakLabel: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontFamily: FONTS.regular,
+  },
+  checkInBtn: {
+    backgroundColor: COLORS.darkButton,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  checkInDone: { backgroundColor: COLORS.lightButton },
+  checkInText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: "700",
+    fontFamily: FONTS.regular,
+  },
+
+  // Us card
   usCard: {
     backgroundColor: COLORS.card,
     borderRadius: 20,
@@ -291,6 +342,16 @@ const styles = StyleSheet.create({
   },
   usDivider: { width: 1, height: 34, backgroundColor: COLORS.border },
 
+  // Loading placeholder
+  loadingCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 18,
+    paddingVertical: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Photo section
   photoEmpty: {
     borderRadius: 16,
     backgroundColor: COLORS.card,
