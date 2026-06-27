@@ -182,6 +182,15 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // --- CLEAR COUPLE (called after leaving partner) ---
+  clearCouple: async () => {
+    const { user } = get();
+    if (!user) return;
+    const updatedUser = { ...user, couple: null };
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+    set({ user: updatedUser });
+  },
+
   // --- LOGOUT ---
   logout: async () => {
     await SecureStore.deleteItemAsync(TOKEN_KEY);

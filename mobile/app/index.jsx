@@ -19,11 +19,7 @@ export default function Index() {
     if (isBootstrapping || !minTimePassed) return;
 
     if (token && user) {
-      if (user.couple) {
-        router.replace("/(tabs)/home");
-      } else {
-        router.replace("/(onBoarding)/pair");
-      }
+      router.replace("/(tabs)/home");
       return;
     }
 

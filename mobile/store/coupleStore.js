@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import api from "../lib/api";
+import { useAuthStore } from "./authStore";
 
 export const useCoupleStore = create((set, get) => ({
   couple: null,
@@ -75,6 +76,8 @@ export const useCoupleStore = create((set, get) => ({
   leavePartner: async () => {
     const res = await api.del("/couple/leave");
     if (res.ok) {
+      // Clear couple ID from the cached user so bootstrap doesn't see stale data
+      await useAuthStore.getState().clearCouple();
       set({
         couple: null,
         streak: null,
