@@ -22,4 +22,16 @@ export function deleteByPublicId(publicId) {
   return cloudinary.uploader.destroy(publicId);
 }
 
+// Deletes multiple resources by their public IDs in a single API call.
+// Cloudinary allows up to 100 IDs per request; we chunk larger arrays.
+export async function deleteManyByPublicIds(publicIds) {
+  if (!publicIds || publicIds.length === 0) return;
+  const CHUNK = 100;
+  for (let i = 0; i < publicIds.length; i += CHUNK) {
+    await cloudinary.api
+      .delete_resources(publicIds.slice(i, i + CHUNK), { resource_type: 'image' })
+      .catch(() => {}); // best-effort — don't fail the caller
+  }
+}
+
 export default cloudinary;

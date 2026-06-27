@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema(
     couple: { type: mongoose.Schema.Types.ObjectId, ref: 'Couple', default: null },
     accentColor: { type: String, default: '#7DB348' },
     avatar: { type: String, default: null },
+    avatarPublicId: { type: String, default: null }, // Cloudinary public_id for deletion
   },
   { timestamps: true }
 );

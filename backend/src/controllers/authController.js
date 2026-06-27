@@ -1,6 +1,7 @@
 import User from '../models/user.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import { signToken } from '../utils/helpers.js';
+import { uploadBuffer, deleteByPublicId } from '../lib/cloudinary.js';
 
 export const register = asyncHandler(async (req, res) => {
   const { name, email, password, accentColor } = req.body;
@@ -40,6 +41,27 @@ export const updateAccent = asyncHandler(async (req, res) => {
   }
   req.user.accentColor = accentColor;
   await req.user.save();
+  res.json({ user: publicUser(req.user) });
+});
+
+// PATCH /api/auth/avatar  multipart: { avatar: <file> }
+// Uploads a profile picture to Cloudinary, replaces any previous one.
+export const updateAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No image uploaded' });
+  }
+
+  // Delete the previous avatar from Cloudinary (best-effort)
+  if (req.user.avatarPublicId) {
+    deleteByPublicId(req.user.avatarPublicId).catch(() => {});
+  }
+
+  const result = await uploadBuffer(req.file.buffer, 'budgies/avatars');
+
+  req.user.avatar = result.secure_url;
+  req.user.avatarPublicId = result.public_id;
+  await req.user.save();
+
   res.json({ user: publicUser(req.user) });
 });
 

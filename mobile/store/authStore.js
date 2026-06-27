@@ -143,6 +143,26 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // --- UPDATE AVATAR ---
+  updateAvatar: async (formData) => {
+    const { token } = get();
+    try {
+      const res = await fetch(`${API_URL}/auth/avatar`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+        // Do NOT set Content-Type — fetch sets multipart/form-data with boundary
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.message || "Upload failed" };
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      set({ user: data.user });
+      return { success: true };
+    } catch {
+      return { success: false, error: "Network error." };
+    }
+  },
+
   // --- UPDATE ACCENT COLOR ---
   setAccent: async (accentColor) => {
     const { token } = get();

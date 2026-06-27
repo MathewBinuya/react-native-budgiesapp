@@ -25,8 +25,12 @@ const coupleSchema = new mongoose.Schema(
     pet: { type: petSchema, default: () => ({}) },
     streak: {
       count: { type: Number, default: 0 },
-      lastCheckIn: { type: String, default: null },
+      lastCheckIn: { type: String, default: null },    // date both partners completed check-in
+      checkedInDate: { type: String, default: null },  // date the checkedInToday array belongs to
       checkedInToday: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      brokenCount: { type: Number, default: 0 },       // last streak count before it broke
+      restores: { type: Number, default: 3 },          // restores remaining this month
+      restoresMonth: { type: String, default: null },  // "YYYY-MM" of last restore refill
     },
   },
   { timestamps: true }

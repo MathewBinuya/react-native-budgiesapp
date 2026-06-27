@@ -1,7 +1,12 @@
 import Couple from '../models/couple.model.js';
+import Photo from '../models/photo.model.js';
+import Journal from '../models/journal.model.js';
+import Notification from '../models/notification.model.js';
+import User from '../models/user.model.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
 import { makeInviteCode } from '../utils/helpers.js';
 import { notifyPartner } from './notificationController.js';
+import { deleteManyByPublicIds } from '../lib/cloudinary.js';
 
 const CODE_EXPIRY_MIN = 5; // invite codes die after 5 minutes (privacy)
 
@@ -140,9 +145,9 @@ export const updateCouple = asyncHandler(async (req, res) => {
 });
 
 // POST /api/couple/leave
-// Removes the current user from their couple. If they were the only member
-// left, the couple document is deleted. Lets users (and you, while testing)
-// reset out of a half-paired or unwanted couple.
+// Soft leave — removes the current user from the couple but does NOT wipe
+// shared data. Useful during testing or when a user created a solo couple
+// and wants to reset without destroying anything.
 export const leaveCouple = asyncHandler(async (req, res) => {
   if (!req.user.couple) {
     return res.status(400).json({ message: "You're not in a couple" });
@@ -151,25 +156,78 @@ export const leaveCouple = asyncHandler(async (req, res) => {
   const couple = await Couple.findById(req.user.couple);
 
   if (couple) {
-    // remove this user from the members list
     couple.members = couple.members.filter(
       (m) => m.toString() !== req.user._id.toString()
     );
 
     if (couple.members.length === 0) {
-      // no one left → delete the whole couple
       await couple.deleteOne();
     } else {
-      // a partner remains — clear any pending invite code and save
       couple.inviteCode = undefined;
       couple.inviteCodeExpires = undefined;
       await couple.save();
     }
   }
 
-  // clear the link on the user
   req.user.couple = null;
   await req.user.save();
 
   res.json({ message: "Left couple" });
+});
+
+// DELETE /api/couple/leave
+// Hard dissolution — permanently ends the partnership and deletes ALL shared
+// data for both users: photos (DB + Cloudinary), journals linked to the
+// couple, notifications, streak, and the virtual pet. Both users are
+// immediately returned to the unpaired state.
+export const dissolveCouple = asyncHandler(async (req, res) => {
+  if (!req.user.couple) {
+    return res.status(400).json({ message: "You don't have a partner to leave" });
+  }
+
+  const couple = await Couple.findById(req.user.couple);
+
+  if (!couple) {
+    // Stale reference — just clear it
+    req.user.couple = null;
+    await req.user.save();
+    return res.json({ message: "Left couple" });
+  }
+
+  // Solo couple (waiting for partner) — nothing to dissolve, just clean up
+  if (couple.members.length < 2) {
+    req.user.couple = null;
+    await req.user.save();
+    await couple.deleteOne();
+    return res.json({ message: "Left couple" });
+  }
+
+  const coupleId = couple._id;
+  const memberIds = couple.members; // both users
+
+  // 1. Collect Cloudinary public IDs so we can clean up remote storage
+  const photoRecords = await Photo.find({ couple: coupleId }).select('publicId').lean();
+  const publicIds = photoRecords.map((p) => p.publicId).filter(Boolean);
+
+  // 2. Delete all photos from the database
+  await Photo.deleteMany({ couple: coupleId });
+
+  // 3. Delete all journal entries that were written within this relationship
+  await Journal.deleteMany({ couple: coupleId });
+
+  // 4. Delete all in-app notifications for this couple
+  await Notification.deleteMany({ couple: coupleId });
+
+  // 5. Clear the couple reference on BOTH users atomically
+  await User.updateMany({ _id: { $in: memberIds } }, { $set: { couple: null } });
+
+  // 6. Delete the couple document — this also removes the embedded pet and streak
+  await couple.deleteOne();
+
+  // 7. Fire-and-forget Cloudinary cleanup (network call; don't block the response)
+  if (publicIds.length > 0) {
+    deleteManyByPublicIds(publicIds).catch(() => {});
+  }
+
+  res.json({ message: "Partnership ended. All shared data has been permanently removed." });
 });

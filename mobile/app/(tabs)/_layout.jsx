@@ -2,15 +2,14 @@ import { useEffect } from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import COLORS from "../../constants/colors";
+import { useColors } from "../../hooks/useColors";
 import { useCoupleStore } from "../../store/coupleStore";
 
 export default function TabsLayout() {
+  const COLORS = useColors();
   const insets = useSafeAreaInsets();
   const { loadCoupleData } = useCoupleStore();
 
-  // Load couple data once when the tab navigator mounts so all tab
-  // screens share a single authoritative isPaired value from the server.
   useEffect(() => {
     loadCoupleData();
   }, []);

@@ -31,6 +31,13 @@
       "expo-dev-client",
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Budgies to access your photos so you can upload shared memories.",
+          "cameraPermission": "Allow Budgies to use your camera to take photos together."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
