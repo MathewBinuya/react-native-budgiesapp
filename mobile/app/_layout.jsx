@@ -4,6 +4,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import SafeScreen from "../components/SafeScreen";
 import { useFonts } from "expo-font";
 import { useThemeStore } from "../store/themeStore";
+import * as SplashScreen from "expo-splash-screen";
+
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -12,6 +15,12 @@ export default function RootLayout() {
 
   const loadTheme = useThemeStore((s) => s.loadTheme);
   useEffect(() => { loadTheme(); }, []);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
 
@@ -23,9 +32,6 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(onBoarding)" />
           <Stack.Screen name="(tabs)" />
-          
-
-
         </Stack>
       </SafeScreen>
     </SafeAreaProvider>

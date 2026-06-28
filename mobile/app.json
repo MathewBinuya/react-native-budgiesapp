@@ -5,7 +5,7 @@
     "owner": "visionfit360",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/login-image.png",
     "scheme": "budgies",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -40,12 +40,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/login-image.png",
+          "imageWidth": 280,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#ffffff"
           }
         }
       ],
