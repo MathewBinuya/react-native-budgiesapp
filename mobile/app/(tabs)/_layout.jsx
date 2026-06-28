@@ -62,6 +62,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="notification" options={{ href: null }} />
       <Tabs.Screen name="photos" options={{ href: null }} />
+      <Tabs.Screen name="bucket" options={{ href: null }} />
     </Tabs>
   );
 }

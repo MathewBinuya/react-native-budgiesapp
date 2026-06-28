@@ -4,7 +4,9 @@ import { useAuthStore } from "./authStore";
 
 export const useCoupleStore = create((set, get) => ({
   couple: null,
-  streak: null, // { count, completedToday, youCheckedInToday, ... }
+  streak: null,
+  moods: {},        // { [userId]: { emoji, label, date } }
+  bucketList: [],
   daysTogether: null,
   isPaired: false,
   loading: false,
@@ -32,6 +34,7 @@ export const useCoupleStore = create((set, get) => ({
       set({
         couple: coupleRes.ok ? coupleRes.data.couple : null,
         daysTogether: coupleRes.ok ? coupleRes.data.daysTogether : null,
+        moods: coupleRes.ok ? (coupleRes.data.moods ?? {}) : {},
         isPaired,
         streak: streakData,
         loaded: true,
@@ -93,11 +96,50 @@ export const useCoupleStore = create((set, get) => ({
     };
   },
 
+  // ── Mood ring ────────────────────────────────────────────────────────────────
+  setMood: async (emoji, label) => {
+    const res = await api.patch('/couple/mood', { emoji, label });
+    if (res.ok) set({ moods: res.data.moods ?? {} });
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
+  // ── Bucket list ───────────────────────────────────────────────────────────
+  fetchBucketList: async () => {
+    const res = await api.get('/couple/bucket');
+    if (res.ok) set({ bucketList: res.data.items ?? [] });
+  },
+
+  addBucketItem: async (text) => {
+    const res = await api.post('/couple/bucket', { text });
+    if (res.ok) set((s) => ({ bucketList: [...s.bucketList, res.data.item] }));
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
+  toggleBucketItem: async (id) => {
+    const res = await api.patch(`/couple/bucket/${id}`, {});
+    if (res.ok) {
+      set((s) => ({
+        bucketList: s.bucketList.map((item) =>
+          item._id === id ? { ...item, ...res.data.item } : item
+        ),
+      }));
+    }
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
+  deleteBucketItem: async (id) => {
+    const res = await api.del(`/couple/bucket/${id}`);
+    if (res.ok) set((s) => ({ bucketList: s.bucketList.filter((i) => i._id !== id) }));
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
   // call after pairing or logout to reset
   reset: () =>
     set({
       couple: null,
       streak: null,
+      moods: {},
+      bucketList: [],
       daysTogether: null,
       isPaired: false,
       loaded: false,

@@ -118,10 +118,18 @@ export const getCouple = asyncHandler(async (req, res) => {
     ? Math.ceil((couple.nextDate.getTime() - Date.now()) / 86400000)
     : null;
 
-  // tell the frontend whether the pairing is complete (both partners present)
   const isPaired = couple.members.length >= 2;
+  const today = new Date().toISOString().slice(0, 10);
 
-  res.json({ couple, daysTogether, daysUntilNextDate, isPaired });
+  // Normalise moods: strip entries that are from a previous day
+  const moods = {};
+  if (couple.moods) {
+    for (const [uid, entry] of Object.entries(couple.moods)) {
+      if (entry?.date === today) moods[uid] = entry;
+    }
+  }
+
+  res.json({ couple, daysTogether, daysUntilNextDate, isPaired, moods });
 });
 
 // PATCH /api/couple
@@ -173,6 +181,83 @@ export const leaveCouple = asyncHandler(async (req, res) => {
   await req.user.save();
 
   res.json({ message: "Left couple" });
+});
+
+// PATCH /api/couple/mood   body: { emoji, label }
+export const setMood = asyncHandler(async (req, res) => {
+  const { emoji, label } = req.body;
+  if (!emoji) return res.status(400).json({ message: 'emoji is required' });
+
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const uid = req.user._id.toString();
+
+  if (!couple.moods) couple.moods = {};
+  couple.moods[uid] = { emoji, label: label || '', date: today };
+  couple.markModified('moods');
+  await couple.save();
+
+  notifyPartner(couple, req.user._id, 'mood_update', { emoji, label });
+  res.json({ moods: couple.moods });
+});
+
+// GET /api/couple/bucket
+export const getBucketList = asyncHandler(async (req, res) => {
+  const couple = await Couple.findById(req.user.couple)
+    .populate('bucketList.addedBy', 'name accentColor avatar')
+    .populate('bucketList.completedBy', 'name');
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+  res.json({ items: couple.bucketList });
+});
+
+// POST /api/couple/bucket   body: { text }
+export const addBucketItem = asyncHandler(async (req, res) => {
+  const { text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ message: 'text is required' });
+
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  couple.bucketList.push({ text: text.trim(), addedBy: req.user._id });
+  await couple.save();
+
+  await couple.populate('bucketList.addedBy', 'name accentColor avatar');
+  res.status(201).json({ item: couple.bucketList[couple.bucketList.length - 1] });
+});
+
+// PATCH /api/couple/bucket/:id   — toggle complete / incomplete
+export const toggleBucketItem = asyncHandler(async (req, res) => {
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  const item = couple.bucketList.id(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+
+  if (item.completedAt) {
+    item.completedAt = null;
+    item.completedBy = null;
+  } else {
+    item.completedAt = new Date();
+    item.completedBy = req.user._id;
+  }
+  await couple.save();
+
+  res.json({ item });
+});
+
+// DELETE /api/couple/bucket/:id
+export const deleteBucketItem = asyncHandler(async (req, res) => {
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  const item = couple.bucketList.id(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+
+  item.deleteOne();
+  await couple.save();
+  res.json({ message: 'Deleted' });
 });
 
 // DELETE /api/couple/leave

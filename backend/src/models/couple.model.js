@@ -25,13 +25,23 @@ const coupleSchema = new mongoose.Schema(
     pet: { type: petSchema, default: () => ({}) },
     streak: {
       count: { type: Number, default: 0 },
-      lastCheckIn: { type: String, default: null },    // date both partners completed check-in
-      checkedInDate: { type: String, default: null },  // date the checkedInToday array belongs to
+      lastCheckIn: { type: String, default: null },
+      checkedInDate: { type: String, default: null },
       checkedInToday: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-      brokenCount: { type: Number, default: 0 },       // last streak count before it broke
-      restores: { type: Number, default: 3 },          // restores remaining this month
-      restoresMonth: { type: String, default: null },  // "YYYY-MM" of last restore refill
+      brokenCount: { type: Number, default: 0 },
+      restores: { type: Number, default: 3 },
+      restoresMonth: { type: String, default: null },
     },
+    // Mood ring — keyed by userId string, updated daily
+    moods: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Shared bucket list
+    bucketList: [{
+      text: { type: String, required: true },
+      addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      createdAt: { type: Date, default: Date.now },
+      completedAt: { type: Date, default: null },
+      completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    }],
   },
   { timestamps: true }
 );

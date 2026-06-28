@@ -6,7 +6,12 @@ import {
   leaveCouple,
   dissolveCouple,
   updateCouple,
-  regenerateCode
+  regenerateCode,
+  setMood,
+  getBucketList,
+  addBucketItem,
+  toggleBucketItem,
+  deleteBucketItem,
 } from '../controllers/coupleController.js';
 import { protect, requireCouple } from '../middleware/auth.middleware.js';
 
@@ -20,5 +25,11 @@ router.delete('/leave', dissolveCouple);    // hard dissolution — deletes all 
 router.get('/', requireCouple, getCouple);
 router.patch('/', requireCouple, updateCouple);
 router.post('/regenerate', regenerateCode);
+
+router.patch('/mood', requireCouple, setMood);
+router.get('/bucket', requireCouple, getBucketList);
+router.post('/bucket', requireCouple, addBucketItem);
+router.patch('/bucket/:id', requireCouple, toggleBucketItem);
+router.delete('/bucket/:id', requireCouple, deleteBucketItem);
 
 export default router;
