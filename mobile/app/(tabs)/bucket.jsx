@@ -8,6 +8,8 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useCallback, useMemo, useState } from "react";
 import { router, useFocusEffect } from "expo-router";
@@ -137,7 +139,10 @@ export default function Bucket() {
 
       {/* Add modal */}
       <Modal visible={addModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Add to bucket list</Text>
             <TextInput
@@ -160,7 +165,7 @@ export default function Bucket() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
