@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import FONTS from '../../constants/fonts';
 import { useColors } from '../../hooks/useColors';
@@ -65,6 +66,7 @@ function AvatarBubble({ name, avatar, accentColor, size = 36 }) {
 export default function Letters() {
   const COLORS = useColors();
   const styles = useMemo(() => makeStyles(COLORS), [COLORS]);
+  const insets = useSafeAreaInsets();
 
   const { user } = useAuthStore();
   const { inbox, sent, fetchInbox, fetchSent, fetchUnreadCount, openLetter, sendLetter, deleteLetter } = useLetterStore();
@@ -277,7 +279,7 @@ export default function Letters() {
       {/* Compose modal */}
       <Modal visible={composing} animationType="slide">
         <KeyboardAvoidingView
-          style={[styles.safe, { backgroundColor: COLORS.background }]}
+          style={[styles.safe, { backgroundColor: COLORS.background, paddingTop: insets.top }]}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           {/* Compose header */}
