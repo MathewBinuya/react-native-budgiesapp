@@ -260,6 +260,67 @@ export const deleteBucketItem = asyncHandler(async (req, res) => {
   res.json({ message: 'Deleted' });
 });
 
+// ── Love Jar ──────────────────────────────────────────────────────────────────
+
+// GET /api/couple/jar
+export const getLoveJar = asyncHandler(async (req, res) => {
+  const couple = await Couple.findById(req.user.couple)
+    .populate('loveJar.addedBy', 'name accentColor avatar')
+    .populate('loveJar.claimedBy', 'name');
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+  res.json({ items: couple.loveJar });
+});
+
+// POST /api/couple/jar   body: { text }
+export const addJarItem = asyncHandler(async (req, res) => {
+  const { text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ message: 'text is required' });
+
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  couple.loveJar.push({ text: text.trim(), addedBy: req.user._id });
+  await couple.save();
+  await couple.populate('loveJar.addedBy', 'name accentColor avatar');
+
+  const item = couple.loveJar[couple.loveJar.length - 1];
+  notifyPartner(couple, req.user._id, 'jar_item_added', { text: item.text });
+  res.status(201).json({ item });
+});
+
+// PATCH /api/couple/jar/:id   — claim / unclaim
+export const claimJarItem = asyncHandler(async (req, res) => {
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  const item = couple.loveJar.id(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+
+  if (item.claimedAt) {
+    item.claimedAt = null;
+    item.claimedBy = null;
+  } else {
+    item.claimedAt = new Date();
+    item.claimedBy = req.user._id;
+    notifyPartner(couple, req.user._id, 'jar_item_claimed', { text: item.text });
+  }
+  await couple.save();
+  res.json({ item });
+});
+
+// DELETE /api/couple/jar/:id
+export const deleteJarItem = asyncHandler(async (req, res) => {
+  const couple = await Couple.findById(req.user.couple);
+  if (!couple) return res.status(404).json({ message: 'Couple not found' });
+
+  const item = couple.loveJar.id(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+
+  item.deleteOne();
+  await couple.save();
+  res.json({ message: 'Deleted' });
+});
+
 // DELETE /api/couple/leave
 // Hard dissolution — permanently ends the partnership and deletes ALL shared
 // data for both users: photos (DB + Cloudinary), journals linked to the

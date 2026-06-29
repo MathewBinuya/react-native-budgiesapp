@@ -181,6 +181,7 @@ const QUICK_ACTIONS = [
   { icon: "images-outline", label: "Photos", route: "/(tabs)/photos" },
   { icon: "create-outline", label: "Write", route: "/(tabs)/write" },
   { icon: "egg-outline", label: "Pet", route: "/(tabs)/pet" },
+  { icon: "gift-outline", label: "Jar", route: "/(tabs)/jar" },
 ];
 
 function getGreeting() {
@@ -204,8 +205,8 @@ export default function Home() {
 
   const { user } = useAuthStore();
   const {
-    streak, daysTogether, isPaired, couple, moods, bucketList,
-    loaded: coupleLoaded, loadCoupleData, restoreStreak, setMood, fetchBucketList,
+    streak, daysTogether, isPaired, couple, moods, bucketList, loveJar,
+    loaded: coupleLoaded, loadCoupleData, restoreStreak, setMood, fetchBucketList, fetchLoveJar,
   } = useCoupleStore();
 
   const [restoring, setRestoring] = useState(false);
@@ -221,6 +222,7 @@ export default function Home() {
     useCallback(() => {
       loadCoupleData();
       fetchBucketList();
+      fetchLoveJar();
     }, [])
   );
 
@@ -463,6 +465,40 @@ export default function Home() {
               )}
               {remainingBucket > 3 && (
                 <Text style={styles.bucketMore}>+{remainingBucket - 3} more</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Love Jar preview */}
+        {isPaired && (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionTitle}>Love Jar 🫙</Text>
+              <TouchableOpacity onPress={() => router.push("/(tabs)/jar")}>
+                <Text style={styles.seeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.bucketCard}
+              onPress={() => router.push("/(tabs)/jar")}
+              activeOpacity={0.85}
+            >
+              {loveJar.filter((i) => !i.claimedAt).length === 0 ? (
+                <View style={styles.bucketEmpty}>
+                  <Text style={styles.bucketEmptyEmoji}>🫙</Text>
+                  <Text style={styles.bucketEmptyText}>Add sweet acts of love for each other</Text>
+                </View>
+              ) : (
+                loveJar.filter((i) => !i.claimedAt).slice(0, 3).map((item, i, arr) => (
+                  <View
+                    key={item._id}
+                    style={[styles.bucketRow, i < arr.length - 1 && styles.bucketRowBorder]}
+                  >
+                    <Text style={{ fontSize: 14 }}>🎁</Text>
+                    <Text style={styles.bucketItemText} numberOfLines={1}>{item.text}</Text>
+                  </View>
+                ))
               )}
             </TouchableOpacity>
           </>

@@ -7,6 +7,7 @@ export const useCoupleStore = create((set, get) => ({
   streak: null,
   moods: {},        // { [userId]: { emoji, label, date } }
   bucketList: [],
+  loveJar: [],
   daysTogether: null,
   isPaired: false,
   loading: false,
@@ -133,6 +134,36 @@ export const useCoupleStore = create((set, get) => ({
     return res.ok ? { success: true } : { success: false, error: res.data?.message };
   },
 
+  // ── Love Jar ───────────────────────────────────────────────────────────────
+  fetchLoveJar: async () => {
+    const res = await api.get('/couple/jar');
+    if (res.ok) set({ loveJar: res.data.items ?? [] });
+  },
+
+  addJarItem: async (text) => {
+    const res = await api.post('/couple/jar', { text });
+    if (res.ok) set((s) => ({ loveJar: [...s.loveJar, res.data.item] }));
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
+  claimJarItem: async (id) => {
+    const res = await api.patch(`/couple/jar/${id}`, {});
+    if (res.ok) {
+      set((s) => ({
+        loveJar: s.loveJar.map((item) =>
+          item._id === id ? { ...item, ...res.data.item } : item
+        ),
+      }));
+    }
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
+  deleteJarItem: async (id) => {
+    const res = await api.del(`/couple/jar/${id}`);
+    if (res.ok) set((s) => ({ loveJar: s.loveJar.filter((i) => i._id !== id) }));
+    return res.ok ? { success: true } : { success: false, error: res.data?.message };
+  },
+
   // call after pairing or logout to reset
   reset: () =>
     set({
@@ -140,6 +171,7 @@ export const useCoupleStore = create((set, get) => ({
       streak: null,
       moods: {},
       bucketList: [],
+      loveJar: [],
       daysTogether: null,
       isPaired: false,
       loaded: false,

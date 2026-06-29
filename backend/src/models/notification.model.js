@@ -20,7 +20,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['check_in', 'pet_fed', 'pet_played', 'journal_written', 'pet_named', 'letter_received'],
+      enum: ['check_in', 'pet_fed', 'pet_played', 'journal_written', 'pet_named', 'letter_received', 'jar_item_added', 'jar_item_claimed'],
       required: true,
     },
     read: { type: Boolean, default: false },

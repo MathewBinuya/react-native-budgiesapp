@@ -12,6 +12,10 @@ import {
   addBucketItem,
   toggleBucketItem,
   deleteBucketItem,
+  getLoveJar,
+  addJarItem,
+  claimJarItem,
+  deleteJarItem,
 } from '../controllers/coupleController.js';
 import { protect, requireCouple } from '../middleware/auth.middleware.js';
 
@@ -31,5 +35,10 @@ router.get('/bucket', requireCouple, getBucketList);
 router.post('/bucket', requireCouple, addBucketItem);
 router.patch('/bucket/:id', requireCouple, toggleBucketItem);
 router.delete('/bucket/:id', requireCouple, deleteBucketItem);
+
+router.get('/jar', requireCouple, getLoveJar);
+router.post('/jar', requireCouple, addJarItem);
+router.patch('/jar/:id', requireCouple, claimJarItem);
+router.delete('/jar/:id', requireCouple, deleteJarItem);
 
 export default router;

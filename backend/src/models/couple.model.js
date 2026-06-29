@@ -42,6 +42,14 @@ const coupleSchema = new mongoose.Schema(
       completedAt: { type: Date, default: null },
       completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     }],
+    // Love Jar — acts of love left for your partner to claim
+    loveJar: [{
+      text: { type: String, required: true, trim: true, maxlength: 150 },
+      addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      createdAt: { type: Date, default: Date.now },
+      claimedAt: { type: Date, default: null },
+      claimedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    }],
   },
   { timestamps: true }
 );
