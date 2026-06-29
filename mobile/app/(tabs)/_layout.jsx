@@ -4,14 +4,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "../../hooks/useColors";
 import { useCoupleStore } from "../../store/coupleStore";
+import { useLetterStore } from "../../store/letterStore";
 
 export default function TabsLayout() {
   const COLORS = useColors();
   const insets = useSafeAreaInsets();
   const { loadCoupleData } = useCoupleStore();
+  const { fetchUnreadCount, unreadCount } = useLetterStore();
 
   useEffect(() => {
     loadCoupleData();
+    fetchUnreadCount();
   }, []);
 
   return (
@@ -55,6 +58,17 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="create" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="letters"
+        options={{
+          title: "Letters",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="mail" size={size} color={color} />
+          ),
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: COLORS.darkButton, fontSize: 10 },
         }}
       />
 

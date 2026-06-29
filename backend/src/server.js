@@ -15,6 +15,7 @@ import journalRoutes from './routes/journal.routes.js';
 import photoRoutes from './routes/photo.routes.js';
 import streakRoutes from './routes/streak.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import letterRoutes from './routes/letter.routes.js';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/journal', journalRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/streak', streakRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/letters', letterRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
