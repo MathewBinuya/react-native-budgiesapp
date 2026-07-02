@@ -49,10 +49,5 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
-  "overrides": {
-    "@emnapi/core": "1.11.1",
-    "@emnapi/runtime": "1.11.1",
-    "@emnapi/wasi-threads": "1.2.2"
-  },
   "private": true
 }
