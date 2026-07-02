@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  NativeModules,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,17 +23,6 @@ import { useCoupleStore } from "../../store/coupleStore";
 import api from "../../lib/api";
 
 const ACCENT_OPTIONS = ["#88A99E", "#DD8E75", "#D4638D", "#9C8AA5", "#7DA0C4"];
-
-// ── Native picker check ───────────────────────────────────────────────────────
-function isPickerAvailable() {
-  try {
-    if (NativeModules.ExponentImagePicker) return true;
-    if (typeof global.__turboModuleProxy === "function") {
-      return global.__turboModuleProxy("ExponentImagePicker") != null;
-    }
-    return false;
-  } catch { return false; }
-}
 
 // ── Avatar bubble ─────────────────────────────────────────────────────────────
 function AvatarBubble({ name, avatar, accentColor, size = 50, style }) {
@@ -135,11 +124,6 @@ export default function Profile() {
 
   // ── Avatar upload ──────────────────────────────────────────────────────────
   const handleAvatarUpload = async () => {
-    if (!isPickerAvailable()) {
-      Alert.alert("Rebuild required", "Avatar upload needs a new development build with expo-image-picker compiled in.\n\nRun: eas build --profile development");
-      return;
-    }
-    const ImagePicker = require("expo-image-picker");
     const { status, canAskAgain } = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       const { status: next } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -147,7 +131,7 @@ export default function Profile() {
         Alert.alert("Permission needed", "Allow photo access to update your profile picture.",
           canAskAgain
             ? [{ text: "OK" }]
-            : [{ text: "Not now", style: "cancel" }, { text: "Open Settings", onPress: () => { const { Linking } = require("react-native"); Linking.openSettings(); } }]
+            : [{ text: "Not now", style: "cancel" }, { text: "Open Settings", onPress: () => { const { Linking } = require("react-native"); Linking.openSettings(); }}]
         );
         return;
       }

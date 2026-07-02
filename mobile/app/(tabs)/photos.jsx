@@ -12,8 +12,8 @@ import {
   TextInput,
   Platform,
   Linking,
-  NativeModules,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useState, useCallback, useMemo } from "react";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -37,27 +37,6 @@ function formatPhotoDate(iso) {
     });
   } catch {
     return "";
-  }
-}
-
-// ── Native module availability check ─────────────────────────────────────────
-// expo-image-picker needs to be compiled into the native binary (EAS build).
-// We probe for the native module WITHOUT ever requiring the JS package, so
-// there is no throw — LogBox stays silent and the screen renders normally.
-// Old architecture: modules appear in NativeModules (bridge).
-// New architecture: modules are accessed via global.__turboModuleProxy (JSI).
-
-const PICKER_MODULE_NAME = "ExponentImagePicker";
-
-function isPickerAvailable() {
-  try {
-    if (NativeModules[PICKER_MODULE_NAME]) return true;
-    if (typeof global.__turboModuleProxy === "function") {
-      return global.__turboModuleProxy(PICKER_MODULE_NAME) != null;
-    }
-    return false;
-  } catch {
-    return false;
   }
 }
 
@@ -129,19 +108,6 @@ export default function Photos() {
   // ── Upload flow ───────────────────────────────────────────────────────────
 
   const handleUpload = async () => {
-    // Probe the native layer first — never require() if the module isn't there
-    if (!isPickerAvailable()) {
-      Alert.alert(
-        "Rebuild required",
-        "Photo uploads need a new development build with expo-image-picker compiled in.\n\nRun:\n  eas build --profile development",
-      );
-      return;
-    }
-
-    // Safe to require now — the native module is registered
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ImagePicker = require("expo-image-picker");
-
     const ok = await ensureMediaPermission(ImagePicker);
     if (!ok) return;
 
